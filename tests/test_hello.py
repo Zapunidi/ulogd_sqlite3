@@ -1,7 +1,10 @@
 from unittest import TestCase
-from hello_world.app import say_hello
+from ulogd_sqlite3.srv import HTTPRequestHandler
 
 
-class TestHello(TestCase):
-    def test_hello_say(self):
-        self.assertTrue(say_hello() == "Hello")
+class TestGET(TestCase):
+    def test_get(self):
+        self.assertTrue("do_GET" in dir(HTTPRequestHandler))
+
+    def test_post(self):
+        self.assertTrue("do_POST" in dir(HTTPRequestHandler))
