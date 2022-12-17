@@ -19,7 +19,7 @@ def int2ip(i):
 
 
 def ip2int(ip):
-    o = list(map(int, ip.split('.')))
+    o = list(map(int, ip.split(".")))
     res = (16777216 * o[3]) + (65536 * o[2]) + (256 * o[1]) + o[0]
     return res
 
