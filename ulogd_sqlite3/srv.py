@@ -6,8 +6,11 @@ import argparse
 import cgi
 import logging
 import sqlite3
+import ipaddress
+import struct
 from urllib.parse import urlparse, parse_qs
 
+db_filename = ""
 
 def get_main_page():
     answer = """
@@ -99,40 +102,37 @@ def get_main_page():
 }
 </style>
 </head>
-<body>"""
+<body>
+<h2>Select IP</h2>
+"""
+
     answer += """
-<h2>Tree View</h2>
-<ul class="tree">
-  <li>
-    <details open>
-      <summary>Giant planets</summary>
-      <ul>
-        <li>
-          <details>
-            <summary>Gas giants</summary>
-            <ul>
-              <li>Jupiter</li>
-              <li>Saturn</li>
-            </ul>
-          </details>
-        </li>
-        <li>
-          <details>
-            <summary>Ice giants</summary>
-            <ul>
-              <li>Uranus</li>
-              <li>Neptune</li>
-            </ul>
-          </details>
-        </li>
-      </ul>
-    </details>
-  </li>
-</ul>
+<ul class="tree">"""
+
+    def int2ip(i):
+        i = struct.unpack("<I", struct.pack(">I", i))[0]
+        return str(ipaddress.IPv4Address(i))
+
+    con = sqlite3.connect(db_filename)
+    cur = con.cursor()
+    cur.execute("SELECT DISTINCT orig_ip_saddr FROM ulog_ct LIMIT 100")
+    iplist = cur.fetchall()
+    for ip in iplist:
+        answer += "<li><details><summary>{}</summary><ul>".format(int2ip(ip[0]))
+        cur.execute("SELECT flow_start_sec, flow_end_sec, orig_ip_daddr FROM ulog_ct WHERE orig_ip_saddr = {}".format(ip[0]))
+        for data in cur.fetchall():
+            try:
+                answer += "<li>Destination {}. Duration {}</li>".format(int2ip(data[2]), data[1] - data[0])
+            except Exception:
+                pass
+        answer += "</ul></details></li>"
+
+
+    answer +="""</ul>
 
 </body>
-</html>
-    """
+</html>"""
+
     return answer
 
 
@@ -191,7 +191,10 @@ def run():
     logging.basicConfig(filename="ulogd_sqlite3.log", level=logging.WARNING)
 
     try:
-        open(args.filename, "rb")
+        f = open(args.filename, "rb")
+        f.close()
+        global db_filename
+        db_filename = args.filename
     except FileNotFoundError as e:
         print(e)
         print("Can't open database {}".format(args.filename))
