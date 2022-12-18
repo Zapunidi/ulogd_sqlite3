@@ -108,6 +108,56 @@ def ip2int(ip):
     return res
 
 
+def ip2info(ip, cache_db="var/cache.sqlite3db"):
+
+    def cache_store(details):
+        con = sqlite3.connect(cache_db)
+        cur = con.cursor()
+        details.pop("country_flag", None)
+        details.pop("country_currency", None)
+        details.pop("continent", None)
+        columns = ", ".join("`" + str(y) + "`" for y in details.keys())
+        values = ", ".join("'" + str(z).replace("/", "_").replace("'",'"') + "'" for z in details.values())
+        sql = "INSERT INTO ipinfo( " + columns + " ) values (" + values + ")"
+        cur.execute(sql)
+        con.commit()
+
+    def cache_lookup(ip):
+        con = sqlite3.connect(cache_db)
+        cur = con.cursor()
+        cur.execute('SELECT hostname, org, country_name, city FROM ipinfo WHERE "ip" = "{}"'.format(ip))
+        res = cur.fetchall()
+        if len(res) == 0:
+            return None
+        else:
+            return res[0]
+
+    if ipinfo_token != "":
+        info = ip + " "
+        details = cache_lookup(ip)
+        if details is None:
+            handler = ipinfo.getHandler(ipinfo_token)
+            details = handler.getDetails(ip).details
+            cache_store(details)
+            if "hostname" in details:
+                info += "Host {}. ".format(details["hostname"])
+            if "org" in details:
+                info += "Organization {}. ".format(details["org"])
+            if "country_name" in details and "city" in details:
+                info += "{} {}.".format(details["country_name"], details["city"])
+        else:
+            if details[0] is not None:
+                info += "Host {}. ".format(details[0])
+            if details[1] is not None:
+                info += "Organization {}. ".format(details[1])
+            if details[2] is not None and details[3] is not None:
+                info += "{} {}.".format(details[2], details[3])
+    else:
+        info = ip
+
+    return info
+
+
 def get_ip_page(source_ip):
     answer = """
     <!DOCTYPE html>
@@ -131,22 +181,11 @@ def get_ip_page(source_ip):
     cur = con.cursor()
     cur.execute("SELECT DISTINCT orig_ip_daddr FROM ulog_ct "
                 "WHERE orig_ip_saddr = {} "
-                "ORDER BY orig_ip_daddr LIMIT 50".format(ip2int(source_ip)))
+                "ORDER BY orig_ip_daddr LIMIT 12".format(ip2int(source_ip)))
     iplist = cur.fetchall()
     for dest_ip in iplist:
         ip = int2ip(dest_ip[0])
-        if ipinfo_token != "":
-            handler = ipinfo.getHandler(ipinfo_token)
-            details = handler.getDetails(ip).details
-            info = ip + " "
-            if "hostname" in details:
-                info += "Host {}. ".format(details["hostname"])
-            if "org" in details:
-                info += "Organization {}. ".format(details["org"])
-            if "country_name" in details and "city" in details:
-                info += "{} {}.".format(details["country_name"], details["city"])
-        else:
-            info = ip
+        info = ip2info(ip)
         answer += "<li><details><summary>{}</summary><ul>".format(info)
         cur.execute(
             "SELECT flow_start_sec, flow_end_sec FROM ulog_ct "
@@ -254,12 +293,13 @@ def _check_var_cache():
     if not os.path.isdir("var"):
         os.mkdir("var", 0o777)
     # Check and prepare cache database
-    con = sqlite3.connect('var/cache.sqlite3db')
+    con = sqlite3.connect("var/cache.sqlite3db")
     cur = con.cursor()
     cur.execute('SELECT name FROM sqlite_master WHERE "name"="ipinfo"')
     if cur.fetchone() is None:
-        cur.execute('CREATE TABLE ipinfo(ip, other)')
-        cur.execute('CREATE UNIQUE INDEX ip_index ON ipinfo (ip)')
+        cur.execute("CREATE TABLE ipinfo( `ip`, `anycast`, `hostname`, `bogon`, `city`, `region`, `country`, `loc`, `org`, `postal`, `timezone`, `country_name`, `isEU`, `latitude`, `longitude` )")
+        cur.execute("CREATE UNIQUE INDEX ip_index ON ipinfo (ip)")
+        " values ('193.122.33.0', 'Frankfurt am Main', 'Hesse', 'DE', '50.1025,8.6299', 'AS31898 Oracle Corporation', '60326', 'Europe_Berlin', 'Germany', 'True', '{'emoji': '🇩🇪', 'unicode': 'U+1F1E9 U+1F1EA'}', '{'code': 'EUR', 'symbol': '€'}', '{'code': 'EU', 'name': 'Europe'}', '50.1025', '8.6299')"
 
 
 def run():
