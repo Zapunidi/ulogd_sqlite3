@@ -9,6 +9,7 @@ import sqlite3
 import ipaddress
 import struct
 import ipinfo
+import os
 from urllib.parse import urlparse, parse_qs
 
 db_filename = ""
@@ -95,6 +96,7 @@ tree_style = """
     }
 """
 
+
 def int2ip(i):
     i = struct.unpack("<I", struct.pack(">I", i))[0]
     return str(ipaddress.IPv4Address(i))
@@ -149,7 +151,7 @@ def get_ip_page(source_ip):
         cur.execute(
             "SELECT flow_start_sec, flow_end_sec FROM ulog_ct "
             "WHERE orig_ip_saddr = {} AND orig_ip_daddr = {}".format(
-                ip2int(source_ip),dest_ip[0]))
+                ip2int(source_ip), dest_ip[0]))
         for data in cur.fetchall():
             answer += "<li>Duration {}</li>".format(data[1] - data[0])
         answer += "</ul></details></li>"
@@ -247,6 +249,19 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
             return
 
 
+def _check_var_cache():
+    # Check and prepare var folder
+    if not os.path.isdir("var"):
+        os.mkdir("var", 0o777)
+    # Check and prepare cache database
+    con = sqlite3.connect('var/cache.sqlite3db')
+    cur = con.cursor()
+    cur.execute('SELECT name FROM sqlite_master WHERE "name"="ipinfo"')
+    if cur.fetchone() is None:
+        cur.execute('CREATE TABLE ipinfo(ip, other)')
+        cur.execute('CREATE UNIQUE INDEX ip_index ON ipinfo (ip)')
+
+
 def run():
     parser = argparse.ArgumentParser(description="shows data from ulogd sqlite3 database in a form of a web page")
     parser.add_argument("filename", type=str, help="a filename to load database from.")
@@ -254,7 +269,7 @@ def run():
     parser.add_argument("-i", "--ipinfo",
                         type=str,
                         help="an ipinfo.io token for resolving IPs into hostname/organization.",
-                        default = "")
+                        default="")
     args = parser.parse_args()
 
     logging.basicConfig(filename="ulogd_sqlite3.log", level=logging.WARNING)
@@ -262,6 +277,7 @@ def run():
     global ipinfo_token
     ipinfo_token = args.ipinfo
 
+    # Check file availability
     try:
         f = open(args.filename, "rb")
         f.close()
@@ -271,6 +287,8 @@ def run():
         print(e)
         print("Can't open database {}".format(args.filename))
         exit(1)
+
+    _check_var_cache()
 
     logging.info("http server is starting...")
     server_address = ("0.0.0.0", args.port)
