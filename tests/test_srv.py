@@ -1,6 +1,6 @@
 from unittest import TestCase
 from ulogd_sqlite3.srv import HTTPRequestHandler
-from ulogd_sqlite3.srv import ip2int, int2ip
+from ulogd_sqlite3.pages import ip2int, int2ip
 
 
 class TestGET(TestCase):
