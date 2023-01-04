@@ -1,9 +1,23 @@
 import sqlite3
+from datetime import datetime
+from datetime import timedelta
 import struct
 import ipaddress
 import ipinfo
 import logging
 from ulogd_sqlite3.common import gs
+
+
+DAYS_TO_SHOW = 7
+
+
+def get_sql_unixtime_filter_on_day(datetimelist: list, startfieldname: str, endfieldname: str):
+    ret = list()
+    for dt in datetimelist:
+        start = datetime(dt.year, dt.month, dt.day)
+        end = start + timedelta(1)
+        ret.append(f"{startfieldname} < {int(end.timestamp())} AND {endfieldname} > {int(start.timestamp())}")
+    return ret
 
 
 tree_style = """
@@ -169,6 +183,9 @@ def get_ip_page(source_ip):
 
     answer += """
     <ul class="tree">"""
+
+    days = [datetime.now() + timedelta(i - DAYS_TO_SHOW) for i in range(0, DAYS_TO_SHOW + 1)]
+    sqls = get_sql_unixtime_filter_on_day(days, "flow_start_sec", "flow_end_sec")
 
     con = sqlite3.connect(gs._db_filename)
     cur = con.cursor()
