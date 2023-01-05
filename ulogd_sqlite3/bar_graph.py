@@ -2,7 +2,7 @@ import matplotlib
 import numpy as np
 import io
 
-matplotlib.use("TkAgg")
+matplotlib.use("agg")
 import matplotlib.pyplot as plt  # noqa (can't just do import because of Qt5 installation problems)
 
 SECONDS_IN_DAY = 86400
