@@ -4,14 +4,25 @@ from datetime import timedelta
 import struct
 import ipaddress
 import ipinfo
-import logging
+import base64
 from ulogd_sqlite3.common import gs
+from ulogd_sqlite3.bar_graph import get_day_usage_bar
 
 
 DAYS_TO_SHOW = 7
 
 
 def get_sql_unixtime_filter_on_day(datetimelist: list, startfieldname: str, endfieldname: str):
+    """
+    Create a list of sql inserts based on list of datetime timestamps. The list is aligned by date start and date end.
+    For example providing [datetime.now()] will give you and a list of one sql string like
+    "start < 1500066000 AND end > 1499979600" The names "start" and "end" are also parameters.
+    You insert this sql in your query as a filter.
+    :param datetimelist:
+    :param startfieldname:
+    :param endfieldname:
+    :return: a list of sql inserts to be used as filters for query.
+    """
     ret = list()
     for dt in datetimelist:
         start = datetime(dt.year, dt.month, dt.day)
@@ -20,87 +31,78 @@ def get_sql_unixtime_filter_on_day(datetimelist: list, startfieldname: str, endf
     return ret
 
 
-tree_style = """
-    .tree{
-      --spacing : 1.5rem;
-      --radius  : 10px;
+def get_sql_unixtime_filter_on_day_range(datetimestart: datetime, datetimeend: datetime,
+                                         startfieldname: str, endfieldname: str):
+    start = datetime(datetimestart.year, datetimestart.month, datetimestart.day)
+    end = datetime(datetimeend.year, datetimeend.month, datetimeend.day) + timedelta(1)
+    return f"{startfieldname} < {int(end.timestamp())} AND {endfieldname} > {int(start.timestamp())}"
+
+
+head = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <title>Access info</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <style>
+    .collapsible {
+      background-color: #777;
+      color: white;
+      cursor: pointer;
+      padding: 5px;
+      width: 100%;
+      border: 2px solid #888;
+      text-align: left;
+      outline: none;
+      font-size: 15px;
     }
 
-    .tree li{
-      display      : block;
-      position     : relative;
-      padding-left : calc(2 * var(--spacing) - var(--radius) - 2px);
+    .active, .collapsible:hover {
+      background-color: #555;
     }
 
-    .tree ul{
-      margin-left  : calc(var(--radius) - var(--spacing));
-      padding-left : 0;
+    .content {
+      padding: 0 5px;
+      display: none;
+      overflow: hidden;
+      background-color: #f1f1f1;
     }
 
-    .tree ul li{
-      border-left : 2px solid #ddd;
+    table, th, td {
+      border: 1px solid black;
+      border-collapse: collapse;
     }
 
-    .tree ul li:last-child{
-      border-color : transparent;
+    div {
+      padding: 5px;
     }
+    </style>
+    </head>
+    <body>
+    """
+tail = """
 
-    .tree ul li::before{
-      content      : '';
-      display      : block;
-      position     : absolute;
-      top          : calc(var(--spacing) / -2);
-      left         : -2px;
-      width        : calc(var(--spacing) + 2px);
-      height       : calc(var(--spacing) + 1px);
-      border       : solid #ddd;
-      border-width : 0 0 2px 2px;
-    }
+    <script>
+    var coll = document.getElementsByClassName("collapsible");
+    var i;
 
-    .tree summary{
-      display : block;
-      cursor  : pointer;
+    for (i = 0; i < coll.length; i++) {
+      coll[i].addEventListener("click", function() {
+        this.classList.toggle("active");
+        var content = this.nextElementSibling;
+        if (content.style.display === "block") {
+          content.style.display = "none";
+        } else {
+          content.style.display = "block";
+        }
+      });
     }
+    </script>
 
-    .tree summary::marker,
-    .tree summary::-webkit-details-marker{
-      display : none;
-    }
-
-    .tree summary:focus{
-      outline : none;
-    }
-
-    .tree summary:focus-visible{
-      outline : 1px dotted #000;
-    }
-
-    .tree li::after,
-    .tree summary::before{
-      content       : '';
-      display       : block;
-      position      : absolute;
-      top           : calc(var(--spacing) / 2 - var(--radius));
-      left          : calc(var(--spacing) - var(--radius) - 1px);
-      width         : calc(2 * var(--radius));
-      height        : calc(2 * var(--radius));
-      border-radius : 50%;
-      background    : #ddd;
-    }
-
-    .tree summary::before{
-      content     : '+';
-      z-index     : 1;
-      background  : #696;
-      color       : #fff;
-      line-height : calc(2 * var(--radius) - 2px);
-      text-align  : center;
-    }
-
-    .tree details[open] > summary::before{
-      content : '−';
-    }
-"""
+    </body>
+    </html>
+    """
 
 
 def int2ip(i):
@@ -140,7 +142,7 @@ def ip2info(ip, cache_db="var/cache.sqlite3db"):
 
     ipinfo_token = gs._ip_info
     if ipinfo_token != "":
-        info = ip + " "
+        info = ""
         details = cache_lookup(ip)
         if details is None:
             handler = ipinfo.getHandler(ipinfo_token)
@@ -166,53 +168,64 @@ def ip2info(ip, cache_db="var/cache.sqlite3db"):
 
 
 def get_ip_page(source_ip):
-    answer = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-    <title>ulogd_sqlite3 main page</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta charset="UTF-8">
-    <style>"""
-    answer += tree_style
-    answer += """
-    </style>
-    </head>
-    <body>"""
+    answer = head
     answer += "<h2>Connections for IP {}</h2>".format(source_ip)
 
-    answer += """
-    <ul class="tree">"""
-
     days = [datetime.now() + timedelta(i - DAYS_TO_SHOW) for i in range(0, DAYS_TO_SHOW + 1)]
-    sqls = get_sql_unixtime_filter_on_day(days, "flow_start_sec", "flow_end_sec")
-
     con = sqlite3.connect(gs._db_filename)
     cur = con.cursor()
-    cur.execute("SELECT DISTINCT orig_ip_daddr FROM ulog_ct "
-                "WHERE orig_ip_saddr = {} "
-                "ORDER BY orig_ip_daddr LIMIT 12".format(ip2int(source_ip)))
-    iplist = cur.fetchall()
-    for dest_ip in iplist:
-        ip = int2ip(dest_ip[0])
-        info = ip2info(ip)
-        answer += "<li><details><summary>{}</summary><ul>".format(info)
-        cur.execute(
-            "SELECT flow_start_sec, flow_end_sec FROM ulog_ct "
-            "WHERE orig_ip_saddr = {} AND orig_ip_daddr = {}".format(
-                ip2int(source_ip), dest_ip[0]))
-        for data in cur.fetchall():
-            try:
-                answer += "<li>Duration {}</li>".format(data[1] - data[0])
-            except Exception as e:
-                logging.warning("Can't parse (flow_start_sec, flow_end_sec) from database query: " + repr(e))
-        answer += "</ul></details></li>"
+    sql_date_filter = get_sql_unixtime_filter_on_day_range(days[0], days[-1], "flow_start_sec", "flow_end_sec")
+    cur.execute(
+        "SELECT flow_start_sec, flow_end_sec, orig_ip_daddr FROM ulog_ct "
+        "WHERE orig_ip_saddr = {} AND {} ".format(ip2int(source_ip), sql_date_filter) +
+        "AND flow_start_sec IS NOT NULL "
+        "ORDER BY flow_start_sec")
 
-    answer += """</ul>
+    cts = cur.fetchall()
 
-    </body>
-    </html>"""
+    def parse_cts(cts, days):
+        """
+        Returns a list of dictionaries. Each list item for each days item.
+        Each dictionary is keyed by IP in string form ("1.2.3.4") and contains time in seconds of
+        connection start and end relative to the day start.
+        :param cts:
+        :param days:
+        :return:
+        """
+        ret = list()
+        for _ in days:
+            ret.append(dict())
 
+        days_unixtime = [int(day.timestamp()) for day in days]  # Convert days to unixtime
+        for ct in cts:
+            for i, day in enumerate(days_unixtime[:-1]):
+                if ct[0] <= days_unixtime[i + 1] and ct[1] >= day:
+                    ip = int2ip(ct[2])
+                    if ip not in ret[i]:
+                        ret[i][ip] = list()
+                    ret[i][ip].append((ct[0] - day, ct[1] - day))
+        return ret
+
+    day_ip_cts = parse_cts(cts, days)
+
+    for day, ipdict in zip(days, day_ip_cts):
+        answer += '<button type="button" class="collapsible">{}</button>'.format(day.strftime("%d %b"))
+        answer += '<table class="content">'
+        answer += """<tr>
+           <td>IP</td>
+           <td>Info</td>
+           <td>Usage bar</td>
+           </tr>"""
+
+        for ip in ipdict:
+            answer += "<tr><td>{}</td><td>{}</td><td><img src=data:image/png;base64,{}></td></tr>".format(
+                ip,
+                ip2info(ip),
+                base64.b64encode(get_day_usage_bar(ipdict[ip], 500, 10)).decode("utf-8")
+            )
+        answer += "</table>"
+
+    answer += tail
     return answer
 
 
@@ -224,17 +237,13 @@ def get_main_page():
 <title>ulogd_sqlite3 main page</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta charset="UTF-8">
-    <style>"""
-    answer += tree_style
-    answer += """
-    </style>
     </head>
 <body>
 <h2>Select IP</h2>
 """
 
     answer += """
-<ul class="tree">"""
+<ul>"""
 
     con = sqlite3.connect(gs._db_filename)
     cur = con.cursor()
