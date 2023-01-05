@@ -20,9 +20,9 @@ class TestIPConvert(TestCase):
 
 class TestDatetime(TestCase):
     def test_sql(self):
-        timestamps = [datetime.fromtimestamp(1500000000),
-                      datetime.fromtimestamp(1600000000),
-                      datetime.fromtimestamp(1600030801)]
+        timestamps = [datetime.fromtimestamp(1500000000, timezone.utc),
+                      datetime.fromtimestamp(1600000000, timezone.utc),
+                      datetime.fromtimestamp(1600041601, timezone.utc)]
 
         sqls = get_sql_unixtime_filter_on_day(timestamps, "start", "end", timezone.utc)
         self.assertTrue(sqls[0] == "start < 1500076800 AND end > 1499990400")
