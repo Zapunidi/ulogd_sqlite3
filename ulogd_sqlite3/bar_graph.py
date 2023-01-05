@@ -2,7 +2,7 @@ import matplotlib
 import numpy as np
 import io
 
-matplotlib.use("nbAgg")
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt  # noqa (can't just do import because of Qt5 installation problems)
 
 SECONDS_IN_DAY = 86400
@@ -30,4 +30,5 @@ def get_day_usage_bar(ranges, pixelwidth, pixelheight):
     # plt.show()
     f = io.BytesIO()
     plt.savefig(f, format="png")
+    plt.close()
     return f.getvalue()
