@@ -9,7 +9,7 @@ from ulogd_sqlite3.common import gs
 from ulogd_sqlite3.bar_graph import get_day_usage_bar
 
 
-DAYS_TO_SHOW = 7
+DAYS_TO_SHOW = 3
 
 
 def get_sql_unixtime_filter_on_day(datetimelist: list, startfieldname: str, endfieldname: str):
@@ -36,6 +36,14 @@ def get_sql_unixtime_filter_on_day_range(datetimestart: datetime, datetimeend: d
     start = datetime(datetimestart.year, datetimestart.month, datetimestart.day)
     end = datetime(datetimeend.year, datetimeend.month, datetimeend.day) + timedelta(1)
     return f"{startfieldname} < {int(end.timestamp())} AND {endfieldname} > {int(start.timestamp())}"
+
+
+def get_days_list(datetimelist: list):
+    ret = list()
+    for dt in datetimelist:
+        ret.append(datetime(dt.year, dt.month, dt.day))
+    ret.append(ret[-1] + timedelta(1))
+    return ret
 
 
 head = """
@@ -171,7 +179,7 @@ def get_ip_page(source_ip):
     answer = head
     answer += "<h2>Connections for IP {}</h2>".format(source_ip)
 
-    days = [datetime.now() + timedelta(i - DAYS_TO_SHOW) for i in range(0, DAYS_TO_SHOW + 1)]
+    days = get_days_list([datetime.now() + timedelta(i - DAYS_TO_SHOW) for i in range(1, DAYS_TO_SHOW + 1)])
     con = sqlite3.connect(gs._db_filename)
     cur = con.cursor()
     sql_date_filter = get_sql_unixtime_filter_on_day_range(days[0], days[-1], "flow_start_sec", "flow_end_sec")
@@ -208,7 +216,7 @@ def get_ip_page(source_ip):
 
     day_ip_cts = parse_cts(cts, days)
 
-    for day, ipdict in zip(days, day_ip_cts):
+    for day, ipdict in zip(days[:-1], day_ip_cts[:-1]):
         answer += '<button type="button" class="collapsible">{}</button>'.format(day.strftime("%d %b"))
         answer += '<table class="content">'
         answer += """<tr>
