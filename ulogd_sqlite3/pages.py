@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from datetime import timedelta
 import struct
 import ipaddress
@@ -12,7 +12,7 @@ from ulogd_sqlite3.bar_graph import get_day_usage_bar
 DAYS_TO_SHOW = 3
 
 
-def get_sql_unixtime_filter_on_day(datetimelist: list, startfieldname: str, endfieldname: str):
+def get_sql_unixtime_filter_on_day(datetimelist: list, startfieldname: str, endfieldname: str, timezone=None):
     """
     Create a list of sql inserts based on list of datetime timestamps. The list is aligned by date start and date end.
     For example providing [datetime.now()] will give you and a list of one sql string like
@@ -25,7 +25,7 @@ def get_sql_unixtime_filter_on_day(datetimelist: list, startfieldname: str, endf
     """
     ret = list()
     for dt in datetimelist:
-        start = datetime(dt.year, dt.month, dt.day)
+        start = datetime(dt.year, dt.month, dt.day, tzinfo=timezone)
         end = start + timedelta(1)
         ret.append(f"{startfieldname} < {int(end.timestamp())} AND {endfieldname} > {int(start.timestamp())}")
     return ret
