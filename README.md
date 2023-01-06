@@ -183,6 +183,17 @@ nft -v
 pip3 install -r requirements.txt
 mkdir var
 cp /var/log/ulog/ulogd.sqlite3db var/ulogd.sqlite3db
-python3 ulogd_sqlite3/srv.py -p 8080 var/ulogd.sqlite3db
+python3 run.py -p 8080 var/ulogd.sqlite3db
 ```
 
+Сервис должен быть доступен на порту 8080 (ссылка http://localhost:8080).
+
+## Подключение ipinfo
+
+Для получения информации по IP можно использовать сервис ipinfo (https://ipinfo.io/account/home). 
+Сервис предоставляет бесплатно до 50000 запросов информации в месяц. После регистрации сервис выдаёь токен доступа.
+Запуск с токеном делается так:
+
+`python3 run.py -p 8080 -i abcdef01234567 var/ulogd.sqlite3db`
+
+Вместо abcdef01234567 укажите свой токен.
