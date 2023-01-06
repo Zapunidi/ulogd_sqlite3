@@ -197,3 +197,7 @@ python3 run.py -p 8080 var/ulogd.sqlite3db
 `python3 run.py -p 8080 -i abcdef01234567 var/ulogd.sqlite3db`
 
 Вместо abcdef01234567 укажите свой токен.
+
+## Результат
+
+![web service example](example.png)
